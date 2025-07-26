@@ -50,3 +50,13 @@ CONFIGURE["readme", VARIABLE]
 -> Version, Optional
 CONFIGURE["version", "1.0"]
 ```
+
+# How to install four with love
+
+To install four, execute:
+
+```bash
+curl -s https://raw.githubusercontent.com/zer0users/four/refs/heads/main/install.sh | bash
+```
+
+It will install four.
