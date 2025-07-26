@@ -1,0 +1,373 @@
+#!/usr/bin/env python3
+# Four Programming Language Interpreter
+# A programming language made with love ❤️
+
+import sys
+import os
+import re
+import json
+import tempfile
+import subprocess
+import shutil
+import zipfile
+import platform
+from pathlib import Path
+
+class FourError(Exception):
+    """Four errors with love"""
+    pass
+
+class FourInterpreter:
+    def __init__(self):
+        self.project_name = None
+        self.config = {
+            'platform': None,
+            'run': None,
+            'readme': 'Welcome to my app made with Love!',
+            'version': '1.0'
+        }
+        self.exports = {}
+        self.main_code = ""
+        self.project_declared = False
+        self.in_define = False
+        
+    def get_current_platform(self):
+        """Detects the current system platform"""
+        system = platform.system().lower()
+        if system == 'linux':
+            return 'linux'
+        elif system == 'windows':
+            return 'windows'
+        else:
+            # For macOS and others, we'll consider as linux for compatibility
+            return 'linux'
+        
+    def parse_line(self, line):
+        """Parses a Four code line"""
+        # If we're in DEFINE, use the original line without strip()
+        if self.in_define:
+            # Don't strip here to preserve indentation
+            self.main_code += line + "\n"
+            return
+            
+        # For the rest, use strip normally
+        line = line.strip()
+        
+        # Ignore comments and empty lines
+        if not line or line.startswith('->'):
+            return
+            
+        # PROJECT
+        if line.startswith('PROJECT'):
+            if self.project_declared:
+                raise FourError("Error with love: PROJECT can only be declared once")
+            match = re.match(r'PROJECT\s+"([^"]+)"', line)
+            if match:
+                self.project_name = match.group(1)
+                self.project_declared = True
+            else:
+                raise FourError("Error with love: Incorrect syntax in PROJECT")
+                
+        # CONFIGURE
+        elif line.startswith('CONFIGURE'):
+            match = re.match(r'CONFIGURE\["([^"]+)",\s*"([^"]+)"\]', line)
+            if match:
+                key, value = match.groups()
+                # If it's readme and references an exported variable
+                if key == 'readme' and value in self.exports:
+                    self.config[key] = self.exports[value]
+                else:
+                    self.config[key] = value
+            else:
+                raise FourError("Error with love: Incorrect syntax in CONFIGURE")
+                
+        # EXPORT
+        elif line.startswith('EXPORT'):
+            if 'string[' in line:
+                match = re.match(r'EXPORT\s+(\w+)\["([^"]+)"\]', line)
+                if match:
+                    var_name, value = match.groups()
+                    self.exports[var_name] = value
+                else:
+                    raise FourError("Error with love: Incorrect syntax in EXPORT string")
+            elif 'numero[' in line:
+                match = re.match(r'EXPORT\s+(\w+)\[(\d+)\]', line)
+                if match:
+                    var_name, value = match.groups()
+                    self.exports[var_name] = int(value)
+                else:
+                    raise FourError("Error with love: Incorrect syntax in EXPORT numero")
+            else:
+                # Simple EXPORT with multiple lines
+                match = re.match(r'EXPORT\s+(\w+)\["', line)
+                if match:
+                    var_name = match.group(1)
+                    # This will need special handling for multiline strings
+                    self.exports[var_name] = ""
+                    
+        # DEFINE
+        elif line.startswith('DEFINE'):
+            match = re.match(r'DEFINE\s+(\w+)', line)
+            if match:
+                self.in_define = True
+            else:
+                raise FourError("Error with love: Incorrect syntax in DEFINE")
+                
+    def parse_multiline_export(self, lines, start_idx):
+        """Handles multiline EXPORT"""
+        line = lines[start_idx].strip()
+        match = re.match(r'EXPORT\s+(\w+)\["', line)
+        if not match:
+            return start_idx
+            
+        var_name = match.group(1)
+        content = ""
+        i = start_idx
+        
+        # Extract content from the first line after ["
+        first_line_content = line[line.find('["') + 2:]
+        
+        # If the line already ends with "]
+        if first_line_content.endswith('"]'):
+            content = first_line_content[:-2]  # Remove "]
+            self.exports[var_name] = content
+            return i + 1
+            
+        # If it doesn't end with "], continue reading
+        content = first_line_content + "\n"
+        
+        # Look for the closing in the following lines
+        i += 1
+        while i < len(lines):
+            current_line = lines[i].rstrip()
+            if current_line.endswith('"]'):
+                content += current_line[:-2]  # Remove "]
+                break
+            else:
+                content += current_line
+                if i < len(lines) - 1:  # Add newline only if it's not the last line
+                    content += "\n"
+            i += 1
+            
+        self.exports[var_name] = content
+        return i + 1
+        
+    def parse_file(self, filename):
+        """Parses a complete .four file"""
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+                
+            i = 0
+            while i < len(lines):
+                original_line = lines[i].rstrip('\n\r')  # Only remove line breaks
+                line = original_line.strip()
+                
+                # Ignore empty lines and comments (but not when we're in DEFINE)
+                if not self.in_define and (not line or line.startswith('->')):
+                    i += 1
+                    continue
+                
+                # Handle multiline EXPORT
+                if not self.in_define and line.startswith('EXPORT') and '["' in line and not (line.count('"') >= 2 and line.endswith('"]')):
+                    i = self.parse_multiline_export(lines, i)
+                    continue
+                    
+                # Use the original line to preserve indentation in DEFINE
+                if self.in_define:
+                    self.parse_line(original_line)
+                else:
+                    self.parse_line(line)
+                i += 1
+                
+        except FileNotFoundError:
+            raise FourError(f"Error with love: File {filename} not found")
+        except Exception as e:
+            raise FourError(f"Error with love: {str(e)}")
+            
+    def validate(self):
+        """Validates that the configuration is correct"""
+        if not self.project_name:
+            raise FourError("Error with love: Missing PROJECT declaration")
+            
+        if not self.config['platform']:
+            raise FourError("Error with love: Missing mandatory 'platform' configuration")
+            
+        if not self.config['run']:
+            raise FourError("Error with love: Missing mandatory 'run' configuration")
+            
+        if not self.main_code.strip():
+            raise FourError("Error with love: Missing mandatory DEFINE")
+            
+        valid_platforms = ['linux', 'windows', 'all']
+        if self.config['platform'] not in valid_platforms:
+            raise FourError(f"Error with love: Platform '{self.config['platform']}' is not valid. Use: {', '.join(valid_platforms)}")
+            
+    def build(self, output_file):
+        """Builds the compressed binary .app file"""
+        self.validate()
+        
+        print("Building Binary..")
+        
+        # Create temporary directory for files
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create settings.json
+            settings_data = {
+                'project': self.project_name,
+                'platform': self.config['platform'],
+                'run': self.config['run'],
+                'readme': self.config['readme'],
+                'version': self.config['version']
+            }
+            
+            settings_file = os.path.join(temp_dir, 'settings.json')
+            with open(settings_file, 'w', encoding='utf-8') as f:
+                json.dump(settings_data, f, indent=2, ensure_ascii=False)
+            
+            # Create code.four-code
+            code_file = os.path.join(temp_dir, 'code.four-code')
+            with open(code_file, 'w', encoding='utf-8') as f:
+                f.write(self.main_code)
+            
+            # Create .app file as ZIP with custom header
+            with open(output_file, 'wb') as app_file:
+                # Write "LOVE-APP" header
+                app_file.write(b'LOVE-APP')
+                
+                # Create ZIP in memory
+                import io
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    zipf.write(settings_file, 'settings.json')
+                    zipf.write(code_file, 'code.four-code')
+                
+                # Write ZIP content after header
+                zip_buffer.seek(0)
+                app_file.write(zip_buffer.read())
+        
+        print("Done!")
+        
+    def run_app(self, app_file):
+        """Executes a binary .app file"""
+        try:
+            with open(app_file, 'rb') as f:
+                # Read and verify header
+                header = f.read(8)  # "LOVE-APP"
+                if header != b'LOVE-APP':
+                    raise FourError("Error with love: Invalid .app file (incorrect header)")
+                
+                # Read ZIP content
+                zip_content = f.read()
+            
+            # Create temporary directory for extraction
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Write ZIP content to temporary file
+                zip_path = os.path.join(temp_dir, 'temp.zip')
+                with open(zip_path, 'wb') as zip_file:
+                    zip_file.write(zip_content)
+                
+                # Extract files
+                with zipfile.ZipFile(zip_path, 'r') as zipf:
+                    zipf.extractall(temp_dir)
+                
+                # Read settings.json
+                settings_file = os.path.join(temp_dir, 'settings.json')
+                with open(settings_file, 'r', encoding='utf-8') as f:
+                    settings = json.load(f)
+                
+                # Validate platform compatibility
+                app_platform = settings.get('platform', 'all')
+                current_platform = self.get_current_platform()
+                
+                if app_platform != 'all' and app_platform != current_platform:
+                    platform_names = {
+                        'linux': 'Linux',
+                        'windows': 'Windows'
+                    }
+                    current_name = platform_names.get(current_platform, current_platform)
+                    app_name = platform_names.get(app_platform, app_platform)
+                    raise FourError(f"Error with love: This application is designed for {app_name}, but you're running on {current_name}")
+                
+                # Read code.four-code
+                code_file = os.path.join(temp_dir, 'code.four-code')
+                
+                # Execute with configured command
+                run_command = settings['run'].split()
+                run_command.append(code_file)
+                
+                try:
+                    result = subprocess.run(run_command, capture_output=True, text=True)
+                    if result.stdout:
+                        print(result.stdout, end='')
+                    if result.stderr:
+                        print(result.stderr, end='', file=sys.stderr)
+                    return result.returncode
+                except FileNotFoundError:
+                    raise FourError(f"Error with love: Command '{run_command[0]}' not found")
+                    
+        except FileNotFoundError:
+            raise FourError(f"Error with love: File {app_file} not found")
+        except zipfile.BadZipFile:
+            raise FourError("Error with love: Corrupted .app file")
+        except json.JSONDecodeError:
+            raise FourError("Error with love: Corrupted .app configuration")
+
+def main():
+    if len(sys.argv) < 2:
+        print("Four Programming Language - Made with love ❤️")
+        print("Usage:")
+        print("  four build <file.four>       - Compile project")
+        print("  four run <file.app>          - Execute application")
+        print("  four version                 - Show version")
+        return
+        
+    command = sys.argv[1]
+    
+    try:
+        if command == "-v" or command == "--version" or command == "version":
+            print("Four Programming Language v1.0 - Made with love ❤️")
+            print("A programming language that creates applications with love!")
+            return
+            
+        elif command == "build":
+            if len(sys.argv) != 3:
+                print("Error with love: Usage: four build <file.four>")
+                return
+                
+            four_file = sys.argv[2]
+            if not four_file.endswith('.four'):
+                print("Error with love: File must have .four extension")
+                return
+            
+            interpreter = FourInterpreter()
+            interpreter.parse_file(four_file)
+            
+            # The .app name is based on PROJECT, not the .four filename
+            app_file = f"{interpreter.project_name}.app"
+            interpreter.build(app_file)
+            
+        elif command == "run":
+            if len(sys.argv) != 3:
+                print("Error with love: Usage: four run <file.app>")
+                return
+                
+            app_file = sys.argv[2]
+            if not app_file.endswith('.app'):
+                print("Error with love: File must have .app extension")
+                return
+                
+            interpreter = FourInterpreter()
+            interpreter.run_app(app_file)
+            
+        else:
+            print(f"Error with love: Command '{command}' not recognized")
+            
+    except FourError as e:
+        print(str(e))
+        sys.exit(1)
+    except Exception as e:
+        print(f"Unexpected error with love: {str(e)}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
