@@ -43,10 +43,7 @@ CONFIGURE["platform", "linux"]
 -> Run with
 CONFIGURE["run", "lua"]
 -> README, Optional
-EXPORT VARIABLE ["
-Welcome to my love program!
-"]
-CONFIGURE["readme", VARIABLE]
+CONFIGURE["readme", "Welcome to my application!"]
 -> Version, Optional
 CONFIGURE["version", "1.0"]
 ```
@@ -59,4 +56,59 @@ To install four, execute:
 curl -s https://raw.githubusercontent.com/zer0users/four/refs/heads/main/install.sh | bash
 ```
 
-It will install four.
+It will install four with love.
+
+# Four Example (1.0)
+
+```four
+-> example.four
+
+PROJECT "Example"
+
+CONFIGURE["platform", "linux"]
+CONFIGURE["run", "python3"]
+
+DEFINE MAIN
+print('Welcome to my application!')
+import tkinter
+
+root = tkinter.Tk()
+root.title('Love Example')
+root.mainloop()
+```
+
+How to compile:
+
+```bash
+four build example.four
+```
+
+
+# Four Example (1.1)
+
+```four
+-> example.four
+
+PROJECT "Example"
+
+CONFIGURE["platform", "linux"]
+CONFIGURE["run", "python3"]
+
+-> Please replace "user" to your user name! :D
+
+FOLDER "love"
+FILE "/home/user/file.txt" "love/file.txt"
+
+DEFINE MAIN
+file = open('love/file.txt').read()
+print(file)
+```
+
+How to compile:
+
+1. Please modify "user" to your user name.
+2. And add an "file.txt" in your home.
+
+```bash
+four build example.four
+```
