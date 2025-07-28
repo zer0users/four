@@ -119,11 +119,14 @@ Four is avaiable for Linux, The windows version is in deveploment.
 
 Linux install:
 
+```bash
 curl -s https://raw.githubusercontent.com/zer0users/four/refs/heads/main/install.sh | bash
+```
 
 Windows:
 
+```powershell
 iwr -useb https://raw.githubusercontent.com/zer0users/four/refs/heads/main/windows-install.ps1 | iex
-
+```
 Please be aware in this Windows version, the installer has NOT been tested, if you are sure to install four for windows, read his content first please
 But remember, God is with you, Trust him
