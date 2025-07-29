@@ -1,6 +1,6 @@
 # four
 
-⚠️ **Warning: Four is discontinued and it will not recieve any updates, we have made another version named five, the alternative of four.**
+⚠️ **Warning: Four is discontinued and it will not recieve any updates, we have made another version named five, the alternative of four, Visit it in https://github.com/zer0users/five**
 
 Four is an Application Maker! Made with the help of Jehovah!
 For make your first app, It need to include:
