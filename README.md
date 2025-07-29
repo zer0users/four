@@ -1,6 +1,6 @@
 # four
 
-<span style="color: #FFD700;">Warning: Four is discontinued and it will not recieve any updates, we have made another version named five, the alternative of four.</span>
+⚠️ **Warning: Four is discontinued and it will not recieve any updates, we have made another version named five, the alternative of four.**
 
 Four is an Application Maker! Made with the help of Jehovah!
 For make your first app, It need to include:
